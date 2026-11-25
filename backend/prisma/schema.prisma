@@ -1,0 +1,109 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  ADMIN
+  STAFF
+  CUSTOMER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  name         String
+  passwordHash String
+  role         Role    @default(CUSTOMER)
+
+  orders       Order[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Category {
+  id       String @id @default(cuid())
+  name     String @unique
+  position Int
+
+  dishes   Dish[]
+}
+
+model Dish {
+  id          String  @id @default(cuid())
+  name        String
+  description String
+  priceCents  Int
+  available   Boolean @default(true)
+  stock       Int?
+
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+
+  allergens   DishAllergen[]
+  orderItems  OrderItem[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Allergen {
+  id    String @id @default(cuid())
+  code  String @unique
+  label String
+
+  dishes DishAllergen[]
+}
+
+model DishAllergen {
+  dishId    String
+  allergenId String
+
+  dish      Dish     @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  allergen  Allergen @relation(fields: [allergenId], references: [id], onDelete: Cascade)
+
+  @@id([dishId, allergenId])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  status          OrderStatus @default(PENDING)
+  totalCents      Int
+
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+
+  items           OrderItem[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model OrderItem {
+  id                String @id @default(cuid())
+  quantity          Int
+  unitPriceCents    Int
+
+  orderId           String
+  order             Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  dishId            String
+  dish              Dish   @relation(fields: [dishId], references: [id])
+
+  dishName          String
+}
