@@ -1,2 +1,8 @@
 /la-roulotte-kit
 .DS_Store
+node_modules/
+.env
+!.env.example
+*.db
+*.db-journal
+uploads/
