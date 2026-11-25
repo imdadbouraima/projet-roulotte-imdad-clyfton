@@ -1,0 +1,75 @@
+import { prisma } from "../db.js";
+
+type DishFilters = {
+  category?: string;
+  available?: boolean;
+  allergenFree?: string[];
+  q?: string;
+  page: number;
+  pageSize: number;
+};
+
+export const dishRepository = {
+  async findAll(filters: DishFilters) {
+    const where = {
+      ...(filters.category && {
+        category: { name: filters.category },
+      }),
+
+      ...(filters.available !== undefined && {
+        available: filters.available,
+      }),
+
+      ...(filters.allergenFree?.length && {
+        allergens: {
+          none: {
+            allergen: {
+              code: { in: filters.allergenFree },
+            },
+          },
+        },
+      }),
+
+      ...(filters.q && {
+        name: {
+          contains: filters.q,
+        },
+      }),
+    };
+
+    const [dishes, total] = await Promise.all([
+      prisma.dish.findMany({
+        where,
+        include: {
+          category: true,
+          allergens: {
+            include: {
+              allergen: true,
+            },
+          },
+        },
+        orderBy: { name: "asc" },
+        skip: (filters.page - 1) * filters.pageSize,
+        take: filters.pageSize,
+      }),
+
+      prisma.dish.count({ where }),
+    ]);
+
+    return { dishes, total };
+  },
+
+  async findById(id: string) {
+    return prisma.dish.findUnique({
+      where: { id },
+      include: {
+        category: true,
+        allergens: {
+          include: {
+            allergen: true,
+          },
+        },
+      },
+    });
+  },
+};
