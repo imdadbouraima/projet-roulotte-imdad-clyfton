@@ -1,6 +1,7 @@
 
 import { z } from "zod";
 
+// Vérifie les réglages du fichier .env avant de démarrer le serveur.
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
 
@@ -15,6 +16,7 @@ const envSchema = z.object({
 
 const result = envSchema.safeParse(process.env);
 
+// Mieux vaut arrêter le démarrage que lancer l'API avec une configuration incomplète.
 if (!result.success) {
   console.error("Erreur dans la configuration :", result.error.flatten().fieldErrors);
   throw new Error("Configuration invalide. Vérifie le fichier .env.");

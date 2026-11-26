@@ -6,6 +6,7 @@ import { dishRepository } from "./dish.repository.js";
 
 const router = Router();
 
+// Ces routes publiques fournissent les catégories et les allergènes de la carte.
 router.get("/categories", async (_req, res) => {
   const categories = await categoryRepository.findAll();
   res.json(categories);
@@ -16,6 +17,7 @@ router.get("/allergens", async (_req, res) => {
   res.json(allergens.sort((a, b) => a.code.localeCompare(b.code)));
 });
 
+// La liste des plats accepte des filtres et renvoie une page de résultats.
 router.get("/dishes", async (req, res) => {
   const querySchema = z.strictObject({
     category: z.coerce.number().int().positive().optional(),
@@ -62,6 +64,7 @@ router.get("/dishes", async (req, res) => {
   });
 });
 
+// Le détail d'un plat se charge par son identifiant numérique.
 router.get("/dishes/:id", async (req, res) => {
   const id = Number(req.params.id);
 
@@ -82,6 +85,7 @@ router.get("/dishes/:id", async (req, res) => {
   res.json(toDishDto(dish));
 });
 
+// Ne renvoie au front que les informations prévues pour un plat.
 function toDishDto(dish: any) {
   return {
     id: dish.id,

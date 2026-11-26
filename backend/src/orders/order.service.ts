@@ -15,6 +15,7 @@ export class OrderService {
   constructor(private readonly repository: OrderRepository) {}
 
   async create(user: AuthenticatedUser, input: CreateOrderInput) {
+    // Le prix vient de la base, pas du navigateur : le total reçu du front n'est pas fiable.
     const dishes = await this.repository.findDishesByIds(
       input.items.map((item) => item.dishId),
     );
@@ -31,6 +32,7 @@ export class OrderService {
       throw new AuthHttpError(422, "DISH_UNAVAILABLE", "Un ou plusieurs plats sont indisponibles", refused);
     }
 
+    // Enregistre le prix au moment de la commande pour garder son historique.
     let totalCents = 0;
     const lines = input.items.map((item) => {
       const dish = dishById.get(item.dishId)!;
@@ -54,6 +56,7 @@ export class OrderService {
     user: AuthenticatedUser,
     filters: { statuses?: string[]; sort: "asc" | "desc"; page: number; pageSize: number },
   ) {
+    // Les employés voient toutes les commandes ; un client ne voit que les siennes.
     const isCustomer = user.role === "CUSTOMER";
     return this.repository.findMany({
       ...(isCustomer ? { userId: user.id } : {}),
@@ -65,6 +68,7 @@ export class OrderService {
   }
 
   async getById(user: AuthenticatedUser, orderId: number) {
+    // Chercher par identifiant et propriétaire empêche un client d'ouvrir la commande d'un autre.
     if (user.role === "CUSTOMER") {
       const order = await this.repository.findById(orderId, user.id);
       if (!order) throw new AuthHttpError(404, "NOT_FOUND", "Commande introuvable");
@@ -77,6 +81,7 @@ export class OrderService {
   }
 }
 
+// Prépare la commande dans un format stable, sans exposer les objets Prisma.
 export function toOrderDto(order: OrderRecord) {
   return {
     id: order.id,

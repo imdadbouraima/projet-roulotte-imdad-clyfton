@@ -6,6 +6,7 @@ import { hashPassword } from "../src/fourni/auth/index.js";
 import { Role } from "../src/generated/prisma/client.js";
 
 async function main() {
+  // Le seed repart d'une base propre : il efface les données actuelles avant de les recréer.
   await prisma.$transaction(async (tx) => {
     await tx.orderItem.deleteMany();
     await tx.order.deleteMany();
@@ -15,7 +16,7 @@ async function main() {
     await tx.user.deleteMany();
   });
 
-  // 1. Lire le fichier menu.json
+  // Le menu et les comptes de démonstration sont décrits dans ce fichier JSON.
   const menuPath = fileURLToPath(
     new URL("../donnees/menu.json", import.meta.url)
   );
@@ -23,7 +24,7 @@ async function main() {
   const contenu = readFileSync(menuPath, "utf-8");
   const data = JSON.parse(contenu);
 
-  // 2. Créer les catégories
+  // Créer d'abord les catégories, car les plats doivent y être rattachés.
   for (const category of data.categories) {
     await prisma.category.create({
       data: {
@@ -33,7 +34,7 @@ async function main() {
     });
   }
 
-  // 3. Créer les allergènes
+  // Ajouter les allergènes avant les plats pour pouvoir créer leurs relations.
   for (const allergen of data.allergens) {
     await prisma.allergen.create({
       data: {
@@ -43,7 +44,7 @@ async function main() {
     });
   }
 
-  // 4. Créer les plats et les relier aux catégories et allergènes
+  // Créer les plats et relier chacun à sa catégorie et à ses allergènes.
   for (const dish of data.dishes) {
     await prisma.dish.create({
       data: {
@@ -67,7 +68,7 @@ async function main() {
     });
   }
 
-  // 5. Créer les utilisateurs
+  // Les mots de passe sont hachés avant d'être stockés en base.
   for (const user of data.users) {
     const passwordHash = await hashPassword(user.password);
 
@@ -84,7 +85,7 @@ async function main() {
   console.log("Seed terminé avec succès !");
 }
 
-// 6. Exécuter le seed et gérer les erreurs
+// Lancer le seed, signaler les erreurs et fermer proprement la connexion Prisma.
 main()
   .catch((error) => {
     console.error("Erreur pendant le seed :", error);

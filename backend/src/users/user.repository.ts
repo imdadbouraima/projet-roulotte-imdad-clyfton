@@ -1,6 +1,7 @@
 import type { AuthUserStore, StoredUser } from "../fourni/auth/index.js";
 import { prisma } from "../db.js";
 
+// Fournit au module d'authentification les opérations nécessaires sur les comptes.
 export const userRepository: AuthUserStore = {
   async findByEmail(email: string): Promise<StoredUser | null> {
     return prisma.user.findUnique({

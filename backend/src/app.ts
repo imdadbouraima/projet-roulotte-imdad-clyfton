@@ -5,6 +5,7 @@ import { auth } from "./container.js";
 import menuRouter from "./menu/menu.routes.js";
 import ordersRouter from "./orders/orders.routes.js";
 
+// Assemble l'API : protections, routes, puis gestion des erreurs.
 export function createApp() {
   const app = express();
 
@@ -26,12 +27,14 @@ export function createApp() {
   // Transforme les erreurs d'authentification en réponses HTTP lisibles.
   app.use(authErrorHandler);
 
+  // Une route inconnue renvoie une erreur claire au lieu d'une page HTML.
   app.use((_req, res) => {
     res.status(404).json({
       error: { code: "NOT_FOUND", message: "Route introuvable" },
     });
   });
 
+  // Dernier filet de sécurité : les erreurs inattendues restent au format JSON.
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(err);
     res.status(500).json({

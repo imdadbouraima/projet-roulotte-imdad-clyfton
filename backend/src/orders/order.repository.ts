@@ -1,5 +1,6 @@
 import { prisma } from "../db.js";
 
+// Types réduits aux informations dont le service de commande a besoin.
 export type OrderDish = {
   id: number;
   name: string;
@@ -49,6 +50,7 @@ const orderInclude = {
   },
 } as const;
 
+// Toutes les lectures et écritures de commandes passent par Prisma ici.
 export const orderRepository: OrderRepository = {
   async findDishesByIds(dishIds) {
     return prisma.dish.findMany({
@@ -58,6 +60,7 @@ export const orderRepository: OrderRepository = {
   },
 
   async create(data) {
+    // La commande et ses lignes sont créées ensemble : elles restent cohérentes.
     return prisma.$transaction(async (tx) =>
       tx.order.create({
         data: {
@@ -80,6 +83,7 @@ export const orderRepository: OrderRepository = {
         : {}),
     };
 
+    // Charge la page et son total pour que le front puisse construire la pagination.
     const [items, total] = await Promise.all([
       prisma.order.findMany({
         where,

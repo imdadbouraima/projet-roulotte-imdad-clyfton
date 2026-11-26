@@ -7,6 +7,7 @@ import { orderRepository } from "./order.repository.js";
 
 const orderService = new OrderService(orderRepository);
 
+// Forme attendue pour créer une commande : quantités limitées et note facultative.
 const createOrderSchema = z.strictObject({
   items: z.array(z.strictObject({
     dishId: z.number().int().positive(),
@@ -22,6 +23,7 @@ const listOrdersSchema = z.strictObject({
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
 
+// Transforme les erreurs de validation en réponses lisibles par le front.
 function validationError(result: z.ZodSafeParseResult<unknown>): never {
   if (result.success) throw new Error("validationError called with valid data");
   throw new AuthHttpError(
@@ -36,6 +38,7 @@ export const createOrder: RequestHandler = async (req, res) => {
   const parsed = createOrderSchema.safeParse(req.body);
   if (!parsed.success) validationError(parsed);
 
+  // Évite deux lignes séparées pour le même plat dans une seule commande.
   const dishIds = parsed.data.items.map((item) => item.dishId);
   if (new Set(dishIds).size !== dishIds.length) {
     throw new AuthHttpError(400, "VALIDATION_ERROR", "Deux lignes ne peuvent pas viser le meme plat");
@@ -58,6 +61,7 @@ export const listOrders: RequestHandler = async (req, res) => {
     }
   }
 
+  // Le service applique aussi la règle qui limite chaque client à ses commandes.
   const result = await orderService.list(currentUser(req), {
     statuses,
     sort: parsed.data.sort === "createdAt" ? "asc" : "desc",

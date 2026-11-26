@@ -81,7 +81,7 @@ Le site fonctionne sur `http://localhost:5173`.
 | STAFF | cuisine@roulotte.test | Cuisine123! |
 | CUSTOMER | client@roulotte.test | Client123! |
 
-## Vérifier le Palier 1
+## Pour Vérifier le Palier 1
 
 Dans `backend` :
 
