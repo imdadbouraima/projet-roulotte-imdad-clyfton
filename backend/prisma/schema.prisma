@@ -21,11 +21,6 @@ enum OrderStatus {
   CANCELLED
 }
 
-enum PaymentStatus {
-  UNPAID
-  PAID
-}
-
 model User {
   id           Int    @id @default(autoincrement())
   email        String @unique
@@ -53,8 +48,6 @@ model Dish {
   description String  @default("")
   priceCents  Int
   available   Boolean @default(true)
-  stock       Int?
-  imageUrl    String?
 
   categoryId Int
   category   Category @relation(fields: [categoryId], references: [id])
@@ -75,11 +68,10 @@ model Allergen {
 }
 
 model Order {
-  id            Int           @id @default(autoincrement())
-  status        OrderStatus   @default(RECEIVED)
-  note          String?
-  totalCents    Int
-  paymentStatus PaymentStatus @default(UNPAID)
+  id         Int         @id @default(autoincrement())
+  status     OrderStatus @default(RECEIVED)
+  note       String?
+  totalCents Int
 
   userId Int
   user   User @relation(fields: [userId], references: [id])
