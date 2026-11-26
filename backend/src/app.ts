@@ -3,6 +3,7 @@ import { config } from "./config.js";
 import { installSecurity, authErrorHandler } from "./fourni/auth/index.js";
 import { auth } from "./container.js";
 import menuRouter from "./menu/menu.routes.js";
+import ordersRouter from "./orders/orders.routes.js";
 
 export function createApp() {
   const app = express();
@@ -19,10 +20,24 @@ export function createApp() {
 
   // Monte les routes d'authentification et du menu.
   app.use("/auth", auth.router);
+  app.use("/", ordersRouter);
   app.use("/", menuRouter);
 
   // Transforme les erreurs d'authentification en réponses HTTP lisibles.
   app.use(authErrorHandler);
+
+  app.use((_req, res) => {
+    res.status(404).json({
+      error: { code: "NOT_FOUND", message: "Route introuvable" },
+    });
+  });
+
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error(err);
+    res.status(500).json({
+      error: { code: "INTERNAL_ERROR", message: "Erreur interne du serveur" },
+    });
+  });
 
   return app;
 }
