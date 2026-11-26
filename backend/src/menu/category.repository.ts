@@ -1,3 +1,4 @@
+
 import { prisma } from "../db.js";
 
 export const categoryRepository = {
@@ -9,7 +10,7 @@ export const categoryRepository = {
     });
   },
 
-  async findById(id: string) {
+  async findById(id: number) {
     return prisma.category.findUnique({
       where: { id },
     });

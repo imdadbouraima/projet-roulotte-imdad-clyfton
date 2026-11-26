@@ -1,3 +1,4 @@
+
 import { prisma } from "../db.js";
 
 type DishFilters = {
@@ -23,9 +24,7 @@ export const dishRepository = {
       ...(filters.allergenFree?.length && {
         allergens: {
           none: {
-            allergen: {
-              code: { in: filters.allergenFree },
-            },
+            code: { in: filters.allergenFree },
           },
         },
       }),
@@ -42,11 +41,7 @@ export const dishRepository = {
         where,
         include: {
           category: true,
-          allergens: {
-            include: {
-              allergen: true,
-            },
-          },
+          allergens: true,
         },
         orderBy: { name: "asc" },
         skip: (filters.page - 1) * filters.pageSize,
@@ -59,16 +54,12 @@ export const dishRepository = {
     return { dishes, total };
   },
 
-  async findById(id: string) {
+  async findById(id: number) {
     return prisma.dish.findUnique({
       where: { id },
       include: {
         category: true,
-        allergens: {
-          include: {
-            allergen: true,
-          },
-        },
+        allergens: true,
       },
     });
   },

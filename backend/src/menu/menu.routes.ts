@@ -23,7 +23,7 @@ router.get("/dishes", async (req, res) => {
     allergenFree: z.string().optional(),
     q: z.string().optional(),
     page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(100).default(10),
+    pageSize: z.coerce.number().int().min(1).max(50).default(10),
   });
 
   const parsed = querySchema.safeParse(req.query);
@@ -49,18 +49,24 @@ router.get("/dishes", async (req, res) => {
   });
 
   res.json({
-    data: result.dishes,
-    pagination: {
-      page: filters.page,
-      pageSize: filters.pageSize,
-      total: result.total,
-      totalPages: Math.ceil(result.total / filters.pageSize),
-    },
-  });
+  items: result.dishes,
+  total: result.total,
+  page: filters.page,
+  pageSize: filters.pageSize,
+});
 });
 
 router.get("/dishes/:id", async (req, res) => {
-  const dish = await dishRepository.findById(req.params.id);
+  const id = Number(req.params.id);
+
+if (!Number.isInteger(id) || id <= 0) {
+  return res.status(400).json({
+    error: "INVALID_ID",
+    message: "Identifiant invalide",
+  });
+}
+
+const dish = await dishRepository.findById(id);
 
   if (!dish) {
     return res.status(404).json({ error: "DISH_NOT_FOUND" });

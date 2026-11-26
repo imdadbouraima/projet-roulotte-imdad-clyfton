@@ -30,7 +30,7 @@ export type OrderRecord = {
   status: "RECEIVED" | "PREPARING" | "READY" | "PICKED_UP" | "CANCELLED";
   note: string | null;
   totalCents: number;
-  paymentStatus: "UNPAID" | "PAID";
+
   createdAt: Date;
   updatedAt: Date;
   user: { id: number; name: string };

@@ -9,7 +9,7 @@ function record(overrides: Partial<OrderRecord> = {}): OrderRecord {
     status: "RECEIVED",
     note: null,
     totalCents: 2300,
-    paymentStatus: "UNPAID",
+
     createdAt: new Date("2026-12-01T11:42:00.000Z"),
     updatedAt: new Date("2026-12-01T11:42:00.000Z"),
     user: { id: 3, name: "Chris Client" },
@@ -108,6 +108,19 @@ describe("OrderService", () => {
       expect.not.objectContaining({ userId: expect.anything() }),
     );
   });
+  it("limite les commandes d'un client à son propre compte", async () => {
+  const repository = repositoryStub();
+  const service = new OrderService(repository);
+
+  await service.list(
+    { id: 3, role: "CUSTOMER" },
+    { sort: "desc", page: 1, pageSize: 20 },
+  );
+
+  expect(repository.findMany).toHaveBeenCalledWith(
+    expect.objectContaining({ userId: 3 }),
+  );
+});
 
   it("produit exactement les champs visibles de la commande au Palier 1", () => {
     expect(toOrderDto(record())).toEqual({
