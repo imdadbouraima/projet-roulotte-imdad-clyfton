@@ -13,25 +13,31 @@ router.get("/categories", async (_req, res) => {
 
 router.get("/allergens", async (_req, res) => {
   const allergens = await allergenRepository.findAll();
-  res.json(allergens);
+  res.json(allergens.sort((a, b) => a.code.localeCompare(b.code)));
 });
 
 router.get("/dishes", async (req, res) => {
-  const querySchema = z.object({
-    category: z.string().optional(),
+  const querySchema = z.strictObject({
+    category: z.coerce.number().int().positive().optional(),
     available: z.enum(["true", "false"]).optional(),
     allergenFree: z.string().optional(),
-    q: z.string().optional(),
+    q: z.string().max(50).optional(),
     page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(50).default(10),
+    pageSize: z.coerce.number().int().min(1).max(50).default(20),
   });
 
   const parsed = querySchema.safeParse(req.query);
 
   if (!parsed.success) {
     return res.status(400).json({
-      error: "VALIDATION_ERROR",
-      details: parsed.error.issues,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Parametres de requete invalides",
+        details: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
     });
   }
 
@@ -49,30 +55,46 @@ router.get("/dishes", async (req, res) => {
   });
 
   res.json({
-  items: result.dishes,
-  total: result.total,
-  page: filters.page,
-  pageSize: filters.pageSize,
-});
+    items: result.dishes.map(toDishDto),
+    total: result.total,
+    page: filters.page,
+    pageSize: filters.pageSize,
+  });
 });
 
 router.get("/dishes/:id", async (req, res) => {
   const id = Number(req.params.id);
 
-if (!Number.isInteger(id) || id <= 0) {
-  return res.status(400).json({
-    error: "INVALID_ID",
-    message: "Identifiant invalide",
-  });
-}
-
-const dish = await dishRepository.findById(id);
-
-  if (!dish) {
-    return res.status(404).json({ error: "DISH_NOT_FOUND" });
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({
+      error: { code: "VALIDATION_ERROR", message: "Identifiant invalide" },
+    });
   }
 
-  res.json(dish);
+  const dish = await dishRepository.findById(id);
+
+  if (!dish) {
+    return res.status(404).json({
+      error: { code: "NOT_FOUND", message: "Plat introuvable" },
+    });
+  }
+
+  res.json(toDishDto(dish));
 });
+
+function toDishDto(dish: any) {
+  return {
+    id: dish.id,
+    name: dish.name,
+    description: dish.description,
+    priceCents: dish.priceCents,
+    available: dish.available,
+    category: { id: dish.category.id, name: dish.category.name },
+    allergens: dish.allergens.map((allergen: any) => ({
+      code: allergen.code,
+      label: allergen.label,
+    })),
+  };
+}
 
 export default router;

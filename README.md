@@ -1,35 +1,100 @@
 # La Roulotte — API du food truck
 
-Projet de Clyfton et Imdad : l'API de click & collect du food truck La Roulotte.
+Backend du projet La Roulotte réalisé avec TypeScript, Express et Prisma.
 
-## Ce qu'on a fait jusqu'ici
+Le projet utilise le kit fourni par le professeur (Vous). Le contrat API se trouve dans `la-roulotte-kit/contrat/openapi.yaml`.
 
-- Un dépôt GitHub partagé pour nous deux.
-- Le kit du prof (front, recette, contrat) gardé à part et ignoré par Git : on n'y touche pas.
-- Un `.gitignore` qui écarte le kit, `node_modules`, `.env` et la base de données.
-- Notre API rangée dans le dossier `backend`, avec son `package.json` et les bibliothèques demandées par le sujet.
-- Le module de connexion et le menu du prof copiés dans `backend`, sans les modifier.
-- La base de données avec Prisma (SQLite) : utilisateurs, plats, catégories, allergènes, commandes.
-- L'API démarre, avec ces routes :
-  - `GET /health`
-  - `/auth` : inscription, connexion, profil (module du prof)
-  - `GET /categories`, `GET /allergens`
-  - `GET /dishes` (filtres, recherche, pagination) et `GET /dishes/:id`
+## Où nous en sommes
 
-## Lancer
+La base technique est créée :
+
+- serveur Express;
+- TypeScript;
+- Prisma avec SQLite;
+- configuration avec des variables d'environnement;
+- module d'authentification fourni;
+- modèles des utilisateurs, catégories, allergènes, plats, commandes et lignes de commande;
+- route `/health`;
+- routes d'authentification;
+- routes du menu;
+- routes des commandes.
+
+La migration du Palier 1 est configurée.
+
+## Validation
+
+Le Palier 1 a été vérifié avec :
+
+- 11 tests Vitest locaux;
+- `npm run typecheck`;
+- la validation Prisma;
+- la recette officielle du Palier 1;
+- 37 tests sur 37 réussis.
+
+## Répartition
+
+- Clyfton : création et consultation des commandes.
+- Imdad : menu, catégories, allergènes, plats et données initiales.
+
+## Préparer le projet
+
+Dans le dossier `backend` :
 
 ```bash
 cd backend
 npm install
 cp .env.example .env
-npm run db:migrate
+npx prisma migrate dev
+npx prisma generate
+npm run seed
+```
+
+## Lancer l'API
+
+Dans un premier terminal :
+
+```bash
+cd backend
+npm run seed
 npm run dev
 ```
 
-## Prochaines étapes
+L'API fonctionne sur `http://localhost:3000`.
 
-- Remplir la base avec le menu (`npm run seed`)
-- Ajouter, modifier et supprimer des plats
-- Les commandes
-- Le paiement
-- Le suivi en direct (`/events`)
+## Lancer le site
+
+Dans un deuxième terminal :
+
+```bash
+cd la-roulotte-kit
+npm install
+npm run front
+```
+
+Le site fonctionne sur `http://localhost:5173`.
+
+## Comptes de démonstration
+
+| Rôle | Email | Mot de passe |
+|---|---|---|
+| ADMIN | admin@roulotte.test | Admin123! |
+| STAFF | cuisine@roulotte.test | Cuisine123! |
+| CUSTOMER | client@roulotte.test | Client123! |
+
+## Vérifier le Palier 1
+
+Dans `backend` :
+
+```bash
+npm test
+npm run typecheck
+npx prisma validate
+npx prisma migrate status
+```
+
+Avec l'API démarrée, dans `la-roulotte-kit` :
+
+```bash
+cd la-roulotte-kit
+npm run recette:1
+```

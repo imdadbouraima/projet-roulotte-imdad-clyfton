@@ -2,7 +2,7 @@
 import { prisma } from "../db.js";
 
 type DishFilters = {
-  category?: string;
+  category?: number;
   available?: boolean;
   allergenFree?: string[];
   q?: string;
@@ -14,7 +14,7 @@ export const dishRepository = {
   async findAll(filters: DishFilters) {
     const where = {
       ...(filters.category && {
-        category: { name: filters.category },
+        categoryId: filters.category,
       }),
 
       ...(filters.available !== undefined && {
@@ -43,7 +43,10 @@ export const dishRepository = {
           category: true,
           allergens: true,
         },
-        orderBy: { name: "asc" },
+        orderBy: [
+          { category: { position: "asc" } },
+          { name: "asc" },
+        ],
         skip: (filters.page - 1) * filters.pageSize,
         take: filters.pageSize,
       }),

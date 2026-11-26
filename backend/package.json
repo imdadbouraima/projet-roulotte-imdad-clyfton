@@ -12,6 +12,7 @@
     "start": "tsx --env-file-if-exists=.env src/server.ts",
     "db:migrate": "prisma migrate dev",
     "seed": "tsx --env-file-if-exists=.env prisma/seed.ts",
+    "recette:1": "npm --prefix ../la-roulotte-kit run recette:1",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

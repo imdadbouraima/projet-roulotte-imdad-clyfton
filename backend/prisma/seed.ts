@@ -6,6 +6,15 @@ import { hashPassword } from "../src/fourni/auth/index.js";
 import { Role } from "../src/generated/prisma/client.js";
 
 async function main() {
+  await prisma.$transaction(async (tx) => {
+    await tx.orderItem.deleteMany();
+    await tx.order.deleteMany();
+    await tx.dish.deleteMany();
+    await tx.allergen.deleteMany();
+    await tx.category.deleteMany();
+    await tx.user.deleteMany();
+  });
+
   // 1. Lire le fichier menu.json
   const menuPath = fileURLToPath(
     new URL("../donnees/menu.json", import.meta.url)
