@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE "User" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "email" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
@@ -11,20 +11,19 @@ CREATE TABLE "User" (
 
 -- CreateTable
 CREATE TABLE "Category" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "name" TEXT NOT NULL,
     "position" INTEGER NOT NULL
 );
 
 -- CreateTable
 CREATE TABLE "Dish" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "name" TEXT NOT NULL,
-    "description" TEXT NOT NULL,
+    "description" TEXT NOT NULL DEFAULT '',
     "priceCents" INTEGER NOT NULL,
     "available" BOOLEAN NOT NULL DEFAULT true,
-    "stock" INTEGER,
-    "categoryId" TEXT NOT NULL,
+    "categoryId" INTEGER NOT NULL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Dish_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
@@ -32,27 +31,18 @@ CREATE TABLE "Dish" (
 
 -- CreateTable
 CREATE TABLE "Allergen" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "code" TEXT NOT NULL,
     "label" TEXT NOT NULL
 );
 
 -- CreateTable
-CREATE TABLE "DishAllergen" (
-    "dishId" TEXT NOT NULL,
-    "allergenId" TEXT NOT NULL,
-
-    PRIMARY KEY ("dishId", "allergenId"),
-    CONSTRAINT "DishAllergen_dishId_fkey" FOREIGN KEY ("dishId") REFERENCES "Dish" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "DishAllergen_allergenId_fkey" FOREIGN KEY ("allergenId") REFERENCES "Allergen" ("id") ON DELETE CASCADE ON UPDATE CASCADE
-);
-
--- CreateTable
 CREATE TABLE "Order" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "status" TEXT NOT NULL DEFAULT 'RECEIVED',
+    "note" TEXT,
     "totalCents" INTEGER NOT NULL,
-    "userId" TEXT NOT NULL,
+    "userId" INTEGER NOT NULL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Order_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
@@ -60,14 +50,22 @@ CREATE TABLE "Order" (
 
 -- CreateTable
 CREATE TABLE "OrderItem" (
-    "id" TEXT NOT NULL PRIMARY KEY,
     "quantity" INTEGER NOT NULL,
     "unitPriceCents" INTEGER NOT NULL,
-    "orderId" TEXT NOT NULL,
-    "dishId" TEXT NOT NULL,
-    "dishName" TEXT NOT NULL,
+    "orderId" INTEGER NOT NULL,
+    "dishId" INTEGER NOT NULL,
+
+    PRIMARY KEY ("orderId", "dishId"),
     CONSTRAINT "OrderItem_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "OrderItem_dishId_fkey" FOREIGN KEY ("dishId") REFERENCES "Dish" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "_AllergenToDish" (
+    "A" INTEGER NOT NULL,
+    "B" INTEGER NOT NULL,
+    CONSTRAINT "_AllergenToDish_A_fkey" FOREIGN KEY ("A") REFERENCES "Allergen" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "_AllergenToDish_B_fkey" FOREIGN KEY ("B") REFERENCES "Dish" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateIndex
@@ -77,4 +75,13 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Dish_name_key" ON "Dish"("name");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Allergen_code_key" ON "Allergen"("code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "_AllergenToDish_AB_unique" ON "_AllergenToDish"("A", "B");
+
+-- CreateIndex
+CREATE INDEX "_AllergenToDish_B_index" ON "_AllergenToDish"("B");
