@@ -23,6 +23,8 @@ const listOrdersSchema = z.strictObject({
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
 
+const orderStatusSchema = z.enum(["RECEIVED", "PREPARING", "READY", "PICKED_UP", "CANCELLED"]);
+
 // Transforme les erreurs de validation en réponses lisibles par le front.
 function validationError(result: z.ZodSafeParseResult<unknown>): never {
   if (result.success) throw new Error("validationError called with valid data");
@@ -84,5 +86,22 @@ export const getOrder: RequestHandler = async (req, res) => {
   }
 
   const order = await orderService.getById(currentUser(req), parsed.data);
+  res.json(toOrderDto(order));
+};
+
+export const updateOrderStatus: RequestHandler = async (req, res) => {
+  const parsedId = z.coerce.number().int().positive().safeParse(req.params.id);
+  if (!parsedId.success) {
+    throw new AuthHttpError(400, "VALIDATION_ERROR", "Identifiant invalide");
+  }
+
+  const parsedBody = z.strictObject({ status: orderStatusSchema }).safeParse(req.body);
+  if (!parsedBody.success) validationError(parsedBody);
+
+  const order = await orderService.changeStatus(
+    currentUser(req),
+    parsedId.data,
+    parsedBody.data.status,
+  );
   res.json(toOrderDto(order));
 };

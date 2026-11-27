@@ -39,6 +39,7 @@ function repositoryStub(overrides: Partial<OrderRepository> = {}): OrderReposito
     })),
     findMany: vi.fn(async () => ({ items: [record()], total: 1 })),
     findById: vi.fn(async () => record()),
+    changeStatus: vi.fn(async (_id, _expectedStatus, nextStatus) => record({ status: nextStatus })),
     ...overrides,
   };
 }
@@ -89,6 +90,75 @@ describe("OrderService", () => {
     await expect(service.getById(
       { id: 3, role: "CUSTOMER" },
       12,
+    )).rejects.toMatchObject({
+      status: 404,
+      code: "NOT_FOUND",
+    } satisfies Partial<AuthHttpError>);
+  });
+
+  it("fait avancer une commande selon le cycle autorisé pour le staff", async () => {
+    const repository = repositoryStub({
+      findById: vi.fn(async () => record({ status: "PREPARING" })),
+    });
+    const service = new OrderService(repository);
+
+    const updated = await service.changeStatus(
+      { id: 2, role: "STAFF" },
+      12,
+      "READY",
+    );
+
+    expect(updated.status).toBe("READY");
+    expect(repository.changeStatus).toHaveBeenCalledWith(12, "PREPARING", "READY", undefined);
+  });
+
+  it("permet à un client d'annuler uniquement sa commande reçue", async () => {
+    const repository = repositoryStub();
+    const service = new OrderService(repository);
+
+    const updated = await service.changeStatus(
+      { id: 3, role: "CUSTOMER" },
+      12,
+      "CANCELLED",
+    );
+
+    expect(updated.status).toBe("CANCELLED");
+    expect(repository.changeStatus).toHaveBeenCalledWith(12, "RECEIVED", "CANCELLED", 3);
+  });
+
+  it("refuse les transitions interdites et les actions client non autorisées", async () => {
+    const repository = repositoryStub();
+    const service = new OrderService(repository);
+
+    await expect(service.changeStatus(
+      { id: 2, role: "STAFF" },
+      12,
+      "READY",
+    )).rejects.toMatchObject({
+      status: 409,
+      code: "INVALID_TRANSITION",
+    } satisfies Partial<AuthHttpError>);
+
+    await expect(service.changeStatus(
+      { id: 3, role: "CUSTOMER" },
+      12,
+      "PREPARING",
+    )).rejects.toMatchObject({
+      status: 403,
+      code: "FORBIDDEN",
+    } satisfies Partial<AuthHttpError>);
+  });
+
+  it("masque la commande d'un autre client lors d'une tentative d'annulation", async () => {
+    const repository = repositoryStub({
+      findById: vi.fn(async () => null),
+    });
+    const service = new OrderService(repository);
+
+    await expect(service.changeStatus(
+      { id: 4, role: "CUSTOMER" },
+      12,
+      "CANCELLED",
     )).rejects.toMatchObject({
       status: 404,
       code: "NOT_FOUND",

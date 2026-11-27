@@ -1,5 +1,13 @@
 import { AuthHttpError } from "../fourni/auth/errors.js";
-import type { OrderRepository, OrderRecord } from "./order.repository.js";
+import type { OrderRepository, OrderRecord, OrderStatus } from "./order.repository.js";
+
+const allowedTransitions: Record<OrderStatus, readonly OrderStatus[]> = {
+  RECEIVED: ["PREPARING", "CANCELLED"],
+  PREPARING: ["READY", "CANCELLED"],
+  READY: ["PICKED_UP", "CANCELLED"],
+  PICKED_UP: [],
+  CANCELLED: [],
+};
 
 export type AuthenticatedUser = {
   id: number;
@@ -78,6 +86,36 @@ export class OrderService {
     const order = await this.repository.findById(orderId);
     if (!order) throw new AuthHttpError(404, "NOT_FOUND", "Commande introuvable");
     return order;
+  }
+
+  async changeStatus(user: AuthenticatedUser, orderId: number, nextStatus: OrderStatus) {
+    const order = await this.getById(user, orderId);
+    const isCustomer = user.role === "CUSTOMER";
+
+    if (isCustomer && nextStatus !== "CANCELLED") {
+      throw new AuthHttpError(403, "FORBIDDEN", "Un client peut seulement annuler sa commande");
+    }
+
+    if (isCustomer && order.status !== "RECEIVED") {
+      throw new AuthHttpError(409, "INVALID_TRANSITION", "La commande ne peut plus être annulée");
+    }
+
+    if (!allowedTransitions[order.status].includes(nextStatus)) {
+      throw new AuthHttpError(409, "INVALID_TRANSITION", "Transition de statut invalide");
+    }
+
+    const updated = await this.repository.changeStatus(
+      orderId,
+      order.status,
+      nextStatus,
+      isCustomer ? user.id : undefined,
+    );
+
+    if (!updated) {
+      throw new AuthHttpError(409, "INVALID_TRANSITION", "La commande a été modifiée entre-temps");
+    }
+
+    return updated;
   }
 }
 

@@ -8,6 +8,8 @@ export type OrderDish = {
   available: boolean;
 };
 
+export type OrderStatus = "RECEIVED" | "PREPARING" | "READY" | "PICKED_UP" | "CANCELLED";
+
 export interface OrderRepository {
   findDishesByIds(dishIds: number[]): Promise<OrderDish[]>;
   create(data: {
@@ -24,11 +26,17 @@ export interface OrderRepository {
     take: number;
   }): Promise<{ items: OrderRecord[]; total: number }>;
   findById(orderId: number, userId?: number): Promise<OrderRecord | null>;
+  changeStatus(
+    orderId: number,
+    expectedStatus: OrderStatus,
+    nextStatus: OrderStatus,
+    userId?: number,
+  ): Promise<OrderRecord | null>;
 }
 
 export type OrderRecord = {
   id: number;
-  status: "RECEIVED" | "PREPARING" | "READY" | "PICKED_UP" | "CANCELLED";
+  status: OrderStatus;
   note: string | null;
   totalCents: number;
 
@@ -105,6 +113,26 @@ export const orderRepository: OrderRepository = {
         ...(userId !== undefined ? { userId } : {}),
       },
       include: orderInclude,
+    }) as Promise<OrderRecord | null>;
+  },
+
+  async changeStatus(orderId, expectedStatus, nextStatus, userId) {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          status: expectedStatus,
+          ...(userId !== undefined ? { userId } : {}),
+        },
+        data: { status: nextStatus },
+      });
+
+      if (updated.count !== 1) return null;
+
+      return tx.order.findUnique({
+        where: { id: orderId },
+        include: orderInclude,
+      });
     }) as Promise<OrderRecord | null>;
   },
 };
