@@ -9,6 +9,23 @@ export type DishFilters = {
   pageSize: number;
 };
 
+export type DishWriteData = {
+  name: string;
+  description: string;
+  priceCents: number;
+  categoryId: number;
+  allergens: string[];
+  available: boolean;
+  stock: number | null;
+};
+
+export type DishPatchData = Partial<DishWriteData>;
+
+const dishDetails = {
+  category: true,
+  allergens: true,
+} as const;
+
 export const dishRepository = {
   async findAll(filters: DishFilters) {
     const where = {
@@ -38,10 +55,7 @@ export const dishRepository = {
     const [dishes, total] = await Promise.all([
       prisma.dish.findMany({
         where,
-        include: {
-          category: true,
-          allergens: true,
-        },
+        include: dishDetails,
         orderBy: [
           { category: { position: "asc" } },
           { name: "asc" },
@@ -59,10 +73,41 @@ export const dishRepository = {
   async findById(id: number) {
     return prisma.dish.findUnique({
       where: { id },
-      include: {
-        category: true,
-        allergens: true,
-      },
+      include: dishDetails,
     });
+  },
+
+  async create(data: DishWriteData) {
+    return prisma.dish.create({
+      data: {
+        name: data.name,
+        description: data.description,
+        priceCents: data.priceCents,
+        available: data.available,
+        stock: data.stock,
+        category: { connect: { id: data.categoryId } },
+        allergens: { connect: data.allergens.map((code) => ({ code })) },
+      },
+      include: dishDetails,
+    });
+  },
+
+  async update(id: number, data: DishPatchData) {
+    const { categoryId, allergens, ...fields } = data;
+    return prisma.dish.update({
+      where: { id },
+      data: {
+        ...fields,
+        ...(categoryId !== undefined ? { category: { connect: { id: categoryId } } } : {}),
+        ...(allergens !== undefined
+          ? { allergens: { set: allergens.map((code) => ({ code })) } }
+          : {}),
+      },
+      include: dishDetails,
+    });
+  },
+
+  async delete(id: number) {
+    await prisma.dish.delete({ where: { id } });
   },
 };

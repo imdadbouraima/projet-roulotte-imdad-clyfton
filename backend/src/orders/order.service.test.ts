@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { AuthHttpError } from "../fourni/auth/errors.js";
-import { OrderService, toOrderDto } from "./order.service.js";
+import { toOrderDto } from "./order.dto.js";
+import { OrderService } from "./order.service.js";
 import type { OrderRecord, OrderRepository } from "./order.repository.js";
 
 function record(overrides: Partial<OrderRecord> = {}): OrderRecord {
@@ -28,7 +29,7 @@ function record(overrides: Partial<OrderRecord> = {}): OrderRecord {
 function repositoryStub(overrides: Partial<OrderRepository> = {}): OrderRepository {
   return {
     findDishesByIds: vi.fn(async () => [
-      { id: 1, name: "Le Classique", priceCents: 1150, available: true },
+      { id: 1, name: "Le Classique", priceCents: 1150, available: true, stock: null },
     ]),
     create: vi.fn(async (data) => ({
       ...record(),
@@ -66,7 +67,7 @@ describe("OrderService", () => {
   it("refuse tous les plats indisponibles avec leur detail", async () => {
     const repository = repositoryStub({
       findDishesByIds: vi.fn(async () => [
-        { id: 1, name: "Le Classique", priceCents: 1150, available: false },
+        { id: 1, name: "Le Classique", priceCents: 1150, available: false, stock: null },
       ]),
     });
     const service = new OrderService(repository);

@@ -2,7 +2,8 @@ import type { RequestHandler } from "express";
 import { z } from "zod";
 import { AuthHttpError } from "../fourni/auth/errors.js";
 import { currentUser } from "../fourni/auth/index.js";
-import { OrderService, toOrderDto } from "./order.service.js";
+import { toOrderDto } from "./order.dto.js";
+import { OrderService } from "./order.service.js";
 import { orderRepository } from "./order.repository.js";
 
 const orderService = new OrderService(orderRepository);

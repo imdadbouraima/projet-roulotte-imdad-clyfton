@@ -53,6 +53,7 @@ model Dish {
   description String  @default("")
   priceCents  Int
   available   Boolean @default(true)
+  stock       Int?
 
   categoryId Int
   category   Category @relation(fields: [categoryId], references: [id])

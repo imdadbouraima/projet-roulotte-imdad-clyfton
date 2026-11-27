@@ -14,6 +14,13 @@ export const allergenRepository = {
       where: { id },
     });
   },
+
+  async findByCodes(codes: string[]) {
+    return prisma.allergen.findMany({
+      where: { code: { in: codes } },
+      select: { code: true },
+    });
+  },
 };
 
 

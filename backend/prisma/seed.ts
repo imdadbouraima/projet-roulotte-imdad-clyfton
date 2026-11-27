@@ -52,6 +52,7 @@ async function main() {
         description: dish.description,
         priceCents: dish.priceCents,
         available: dish.available,
+        stock: dish.stock ?? null,
 
         category: {
           connect: {

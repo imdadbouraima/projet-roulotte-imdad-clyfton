@@ -1,6 +1,36 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
+import { AuthHttpError } from "../fourni/auth/errors.js";
+import { toDishDto } from "./dish.dto.js";
 import { menuService } from "./menu.service.js";
+
+const dishFields = {
+  name: z.string().min(2).max(80),
+  description: z.string().max(300),
+  priceCents: z.number().int().min(50).max(10000),
+  categoryId: z.number().int(),
+  allergens: z.array(z.string()),
+  available: z.boolean(),
+  stock: z.number().int().min(0).nullable(),
+};
+
+const createDishSchema = z.strictObject({
+  ...dishFields,
+  description: dishFields.description.default(""),
+  allergens: dishFields.allergens.default([]),
+  available: dishFields.available.default(true),
+  stock: dishFields.stock.default(null),
+});
+
+const updateDishSchema = z.strictObject({
+  name: dishFields.name.optional(),
+  description: dishFields.description.optional(),
+  priceCents: dishFields.priceCents.optional(),
+  categoryId: dishFields.categoryId.optional(),
+  allergens: dishFields.allergens.optional(),
+  available: dishFields.available.optional(),
+  stock: dishFields.stock.optional(),
+}).refine((data) => Object.keys(data).length > 0, "Au moins un champ doit être fourni");
 
 const querySchema = z.strictObject({
   category: z.coerce.number().int().positive().optional(),
@@ -11,22 +41,13 @@ const querySchema = z.strictObject({
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
 
-function toDishDto(dish: any) {
-  return {
-    id: dish.id,
-    name: dish.name,
-    description: dish.description,
-    priceCents: dish.priceCents,
-    available: dish.available,
-    category: {
-      id: dish.category.id,
-      name: dish.category.name,
-    },
-    allergens: dish.allergens.map((allergen: any) => ({
-      code: allergen.code,
-      label: allergen.label,
-    })),
-  };
+function parseDishId(rawId: unknown): number {
+  if (typeof rawId !== "string") {
+    throw new AuthHttpError(400, "VALIDATION_ERROR", "Identifiant invalide");
+  }
+  const parsed = z.coerce.number().int().positive().safeParse(rawId);
+  if (!parsed.success) throw new AuthHttpError(400, "VALIDATION_ERROR", "Identifiant invalide");
+  return parsed.data;
 }
 
 export const menuController = {
@@ -78,28 +99,53 @@ export const menuController = {
   },
 
   async getDishById(req: Request, res: Response) {
-    const id = Number(req.params.id);
-
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Identifiant invalide",
-        },
-      });
-    }
-
-    const dish = await menuService.getDishById(id);
+    const dish = await menuService.getDishById(parseDishId(req.params.id));
 
     if (!dish) {
-      return res.status(404).json({
-        error: {
-          code: "NOT_FOUND",
-          message: "Plat introuvable",
-        },
-      });
+      throw new AuthHttpError(404, "NOT_FOUND", "Plat introuvable");
     }
 
     return res.json(toDishDto(dish));
+  },
+
+  async createDish(req: Request, res: Response) {
+    const parsed = createDishSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AuthHttpError(
+        400,
+        "VALIDATION_ERROR",
+        "Données invalides",
+        parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      );
+    }
+
+    const dish = await menuService.createDish(parsed.data);
+    return res.status(201).location(`/dishes/${dish.id}`).json(toDishDto(dish));
+  },
+
+  async updateDish(req: Request, res: Response) {
+    const parsed = updateDishSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AuthHttpError(
+        400,
+        "VALIDATION_ERROR",
+        "Données invalides",
+        parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      );
+    }
+
+    const dish = await menuService.updateDish(parseDishId(req.params.id), parsed.data);
+    return res.json(toDishDto(dish));
+  },
+
+  async deleteDish(req: Request, res: Response) {
+    await menuService.deleteDish(parseDishId(req.params.id));
+    return res.status(204).send();
   },
 };

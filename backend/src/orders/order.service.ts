@@ -1,5 +1,6 @@
 import { AuthHttpError } from "../fourni/auth/errors.js";
-import type { OrderRepository, OrderRecord, OrderStatus } from "./order.repository.js";
+import { OrderDishUnavailableError, OrderOutOfStockError } from "./order.errors.js";
+import type { OrderRepository, OrderStatus } from "./order.repository.js";
 
 const allowedTransitions: Record<OrderStatus, readonly OrderStatus[]> = {
   RECEIVED: ["PREPARING", "CANCELLED"],
@@ -29,15 +30,22 @@ export class OrderService {
     );
     const dishById = new Map(dishes.map((dish) => [dish.id, dish]));
     const refused: Array<{ dishId: number; reason: "NOT_FOUND" | "UNAVAILABLE" }> = [];
+    const outOfStock: Array<{ dishId: number; available: number }> = [];
 
     for (const item of input.items) {
       const dish = dishById.get(item.dishId);
       if (!dish) refused.push({ dishId: item.dishId, reason: "NOT_FOUND" });
       else if (!dish.available) refused.push({ dishId: item.dishId, reason: "UNAVAILABLE" });
+      else if (dish.stock !== null && item.quantity > dish.stock) {
+        outOfStock.push({ dishId: item.dishId, available: dish.stock });
+      }
     }
 
     if (refused.length) {
       throw new AuthHttpError(422, "DISH_UNAVAILABLE", "Un ou plusieurs plats sont indisponibles", refused);
+    }
+    if (outOfStock.length) {
+      throw new AuthHttpError(409, "OUT_OF_STOCK", "Stock insuffisant", outOfStock);
     }
 
     // Enregistre le prix au moment de la commande pour garder son historique.
@@ -52,12 +60,27 @@ export class OrderService {
       };
     });
 
-    return this.repository.create({
-      userId: user.id,
-      note: input.note,
-      totalCents,
-      items: lines,
-    });
+    try {
+      return await this.repository.create({
+        userId: user.id,
+        note: input.note,
+        totalCents,
+        items: lines,
+      });
+    } catch (error) {
+      if (error instanceof OrderOutOfStockError) {
+        throw new AuthHttpError(409, "OUT_OF_STOCK", "Stock insuffisant", error.details);
+      }
+      if (error instanceof OrderDishUnavailableError) {
+        throw new AuthHttpError(
+          422,
+          "DISH_UNAVAILABLE",
+          "Un ou plusieurs plats sont indisponibles",
+          error.details,
+        );
+      }
+      throw error;
+    }
   }
 
   async list(
@@ -117,24 +140,4 @@ export class OrderService {
 
     return updated;
   }
-}
-
-// Prépare la commande dans un format stable, sans exposer les objets Prisma.
-export function toOrderDto(order: OrderRecord) {
-  return {
-    id: order.id,
-    status: order.status,
-    note: order.note,
-    totalCents: order.totalCents,
-    createdAt: order.createdAt.toISOString(),
-    updatedAt: order.updatedAt.toISOString(),
-    customer: { id: order.user.id, name: order.user.name },
-    items: order.items.map((item) => ({
-      dishId: item.dishId,
-      name: item.dish.name,
-      quantity: item.quantity,
-      unitPriceCents: item.unitPriceCents,
-      lineTotalCents: item.unitPriceCents * item.quantity,
-    })),
-  };
 }

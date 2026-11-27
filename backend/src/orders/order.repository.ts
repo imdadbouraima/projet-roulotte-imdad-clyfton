@@ -1,4 +1,5 @@
 import { prisma } from "../db.js";
+import { OrderDishUnavailableError, OrderOutOfStockError } from "./order.errors.js";
 
 // Types réduits aux informations dont le service de commande a besoin.
 export type OrderDish = {
@@ -6,6 +7,7 @@ export type OrderDish = {
   name: string;
   priceCents: number;
   available: boolean;
+  stock: number | null;
 };
 
 export type OrderStatus = "RECEIVED" | "PREPARING" | "READY" | "PICKED_UP" | "CANCELLED";
@@ -63,14 +65,47 @@ export const orderRepository: OrderRepository = {
   async findDishesByIds(dishIds) {
     return prisma.dish.findMany({
       where: { id: { in: dishIds } },
-      select: { id: true, name: true, priceCents: true, available: true },
+      select: { id: true, name: true, priceCents: true, available: true, stock: true },
     });
   },
 
   async create(data) {
-    // La commande et ses lignes sont créées ensemble : elles restent cohérentes.
-    return prisma.$transaction(async (tx) =>
-      tx.order.create({
+    return prisma.$transaction(async (tx) => {
+      for (const item of data.items) {
+        const dish = await tx.dish.findUnique({
+          where: { id: item.dishId },
+          select: { available: true, stock: true },
+        });
+
+        if (!dish || !dish.available) {
+          throw new OrderDishUnavailableError([{
+            dishId: item.dishId,
+            reason: dish ? "UNAVAILABLE" : "NOT_FOUND",
+          }]);
+        }
+        if (dish.stock === null) continue;
+
+        const updated = await tx.dish.updateMany({
+          where: { id: item.dishId, stock: { gte: item.quantity } },
+          data: { stock: { decrement: item.quantity } },
+        });
+        if (updated.count !== 1) {
+          const current = await tx.dish.findUnique({
+            where: { id: item.dishId },
+            select: { available: true, stock: true },
+          });
+          if (!current || !current.available) {
+            throw new OrderDishUnavailableError([{
+              dishId: item.dishId,
+              reason: current ? "UNAVAILABLE" : "NOT_FOUND",
+            }]);
+          }
+          if (current.stock === null) continue;
+          throw new OrderOutOfStockError([{ dishId: item.dishId, available: current.stock }]);
+        }
+      }
+
+      return tx.order.create({
         data: {
           userId: data.userId,
           note: data.note,
@@ -79,8 +114,8 @@ export const orderRepository: OrderRepository = {
           items: { create: data.items },
         },
         include: orderInclude,
-      }),
-    ) as Promise<OrderRecord>;
+      });
+    }) as Promise<OrderRecord>;
   },
 
   async findMany(filters) {
@@ -128,6 +163,19 @@ export const orderRepository: OrderRepository = {
       });
 
       if (updated.count !== 1) return null;
+
+      if (nextStatus === "CANCELLED") {
+        const items = await tx.orderItem.findMany({
+          where: { orderId },
+          select: { dishId: true, quantity: true },
+        });
+        for (const item of items) {
+          await tx.dish.updateMany({
+            where: { id: item.dishId, stock: { not: null } },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
+      }
 
       return tx.order.findUnique({
         where: { id: orderId },
