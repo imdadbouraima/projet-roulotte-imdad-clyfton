@@ -1,17 +1,16 @@
 import { prisma } from "../db.js";
 
-export const allergenRepository = {
+export interface AllergenRepository {
+  findAll(): Promise<Array<{ id: number; code: string; label: string }>>;
+  findByCodes(codes: string[]): Promise<Array<{ code: string }>>;
+}
+
+export const allergenRepository: AllergenRepository = {
   async findAll() {
     return prisma.allergen.findMany({
       orderBy: {
         code: "asc",
       },
-    });
-  },
-
-  async findById(id: number) {
-    return prisma.allergen.findUnique({
-      where: { id },
     });
   },
 

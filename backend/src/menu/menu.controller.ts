@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { AuthHttpError } from "../fourni/auth/errors.js";
 import { toDishDto } from "./dish.dto.js";
-import { menuService } from "./menu.service.js";
+import type { MenuServiceApi } from "./menu.service.js";
 
 const dishFields = {
   name: z.string().min(2).max(80),
@@ -50,113 +50,106 @@ function parseDishId(rawId: unknown): number {
   return parsed.data;
 }
 
-export const menuController = {
-  async getCategories(_req: Request, res: Response) {
-    const categories = await menuService.getCategories();
-    res.json(categories);
-  },
+export function createMenuController(menuService: MenuServiceApi) {
+  return {
+    async getCategories(_req: Request, res: Response) {
+      const categories = await menuService.getCategories();
+      res.json(categories);
+    },
 
-  async getAllergens(_req: Request, res: Response) {
-    const allergens = await menuService.getAllergens();
-    res.json(allergens);
-  },
+    async getAllergens(_req: Request, res: Response) {
+      const allergens = await menuService.getAllergens();
+      res.json(allergens);
+    },
 
-  async getDishes(req: Request, res: Response) {
-    const parsed = querySchema.safeParse(req.query);
+    async getDishes(req: Request, res: Response) {
+      const parsed = querySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Parametres de requete invalides",
+            details: parsed.error.issues.map((issue) => ({
+              path: issue.path.join("."),
+              message: issue.message,
+            })),
+          },
+        });
+      }
 
-    if (!parsed.success) {
-      return res.status(400).json({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Parametres de requete invalides",
-          details: parsed.error.issues.map((issue) => ({
+      const filters = parsed.data;
+      const result = await menuService.getDishes({
+        ...filters,
+        available: filters.available === undefined ? undefined : filters.available === "true",
+        allergenFree: filters.allergenFree
+          ? filters.allergenFree.split(",").map((code) => code.trim())
+          : [],
+      });
+
+      return res.json({
+        items: result.dishes.map(toDishDto),
+        total: result.total,
+        page: filters.page,
+        pageSize: filters.pageSize,
+      });
+    },
+
+    async getDishById(req: Request, res: Response) {
+      const dish = await menuService.getDishById(parseDishId(req.params.id));
+      if (!dish) throw new AuthHttpError(404, "NOT_FOUND", "Plat introuvable");
+      return res.json(toDishDto(dish));
+    },
+
+    async createDish(req: Request, res: Response) {
+      const parsed = createDishSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new AuthHttpError(
+          400,
+          "VALIDATION_ERROR",
+          "Données invalides",
+          parsed.error.issues.map((issue) => ({
             path: issue.path.join("."),
             message: issue.message,
           })),
-        },
-      });
-    }
+        );
+      }
 
-    const filters = parsed.data;
+      const dish = await menuService.createDish(parsed.data);
+      return res.status(201).location(`/dishes/${dish.id}`).json(toDishDto(dish));
+    },
 
-    const result = await menuService.getDishes({
-      ...filters,
-      available:
-        filters.available === undefined
-          ? undefined
-          : filters.available === "true",
-      allergenFree: filters.allergenFree
-        ? filters.allergenFree.split(",").map((code) => code.trim())
-        : [],
-    });
+    async updateDish(req: Request, res: Response) {
+      const parsed = updateDishSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new AuthHttpError(
+          400,
+          "VALIDATION_ERROR",
+          "Données invalides",
+          parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        );
+      }
 
-    return res.json({
-      items: result.dishes.map(toDishDto),
-      total: result.total,
-      page: filters.page,
-      pageSize: filters.pageSize,
-    });
-  },
+      const dish = await menuService.updateDish(parseDishId(req.params.id), parsed.data);
+      return res.json(toDishDto(dish));
+    },
 
-  async getDishById(req: Request, res: Response) {
-    const dish = await menuService.getDishById(parseDishId(req.params.id));
+    async deleteDish(req: Request, res: Response) {
+      await menuService.deleteDish(parseDishId(req.params.id));
+      return res.status(204).send();
+    },
 
-    if (!dish) {
-      throw new AuthHttpError(404, "NOT_FOUND", "Plat introuvable");
-    }
+    async uploadDishImage(req: Request, res: Response) {
+      const id = parseDishId(req.params.id);
+      const file = req.file;
+      if (!file) {
+        throw new AuthHttpError(400, "VALIDATION_ERROR", "Le fichier image est requis");
+      }
 
-    return res.json(toDishDto(dish));
-  },
-
-  async createDish(req: Request, res: Response) {
-    const parsed = createDishSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new AuthHttpError(
-        400,
-        "VALIDATION_ERROR",
-        "Données invalides",
-        parsed.error.issues.map((issue) => ({
-          path: issue.path.join("."),
-          message: issue.message,
-        })),
-      );
-    }
-
-    const dish = await menuService.createDish(parsed.data);
-    return res.status(201).location(`/dishes/${dish.id}`).json(toDishDto(dish));
-  },
-
-  async updateDish(req: Request, res: Response) {
-    const parsed = updateDishSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new AuthHttpError(
-        400,
-        "VALIDATION_ERROR",
-        "Données invalides",
-        parsed.error.issues.map((issue) => ({
-          path: issue.path.join("."),
-          message: issue.message,
-        })),
-      );
-    }
-
-    const dish = await menuService.updateDish(parseDishId(req.params.id), parsed.data);
-    return res.json(toDishDto(dish));
-  },
-
-  async deleteDish(req: Request, res: Response) {
-    await menuService.deleteDish(parseDishId(req.params.id));
-    return res.status(204).send();
-  },
-
-  async uploadDishImage(req: Request, res: Response) {
-    const id = parseDishId(req.params.id);
-    const file = req.file;
-    if (!file) {
-      throw new AuthHttpError(400, "VALIDATION_ERROR", "Le fichier image est requis");
-    }
-
-    const updatedDish = await menuService.uploadDishImage(id, file.buffer);
-    return res.json(toDishDto(updatedDish));
-  },
-};
+      const updatedDish = await menuService.uploadDishImage(id, file.buffer);
+      return res.json(toDishDto(updatedDish));
+    },
+  };
+}

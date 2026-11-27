@@ -23,6 +23,11 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
 // Un compte peut être client, membre de la cuisine ou administrateur.
 model User {
   id           Int    @id @default(autoincrement())
@@ -77,10 +82,12 @@ model Allergen {
 
 // Une commande appartient à un client et contient plusieurs lignes.
 model Order {
-  id         Int         @id @default(autoincrement())
-  status     OrderStatus @default(RECEIVED)
-  note       String?
-  totalCents Int
+  id                Int           @id @default(autoincrement())
+  status            OrderStatus   @default(RECEIVED)
+  paymentStatus     PaymentStatus @default(UNPAID)
+  paymentInProgress Boolean       @default(false)
+  note              String?
+  totalCents        Int
 
   userId Int
   user   User @relation(fields: [userId], references: [id])

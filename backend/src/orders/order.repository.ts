@@ -1,5 +1,7 @@
 import { prisma } from "../db.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import { OrderDishUnavailableError, OrderOutOfStockError } from "./order.errors.js";
+import type { OrderStatus } from "./order-status.js";
 
 // Types réduits aux informations dont le service de commande a besoin.
 export type OrderDish = {
@@ -10,7 +12,14 @@ export type OrderDish = {
   stock: number | null;
 };
 
-export type OrderStatus = "RECEIVED" | "PREPARING" | "READY" | "PICKED_UP" | "CANCELLED";
+const orderInclude = {
+  user: { select: { id: true, name: true } },
+  items: {
+    include: { dish: { select: { name: true } } },
+  },
+} as const;
+
+export type OrderRecord = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
 
 export interface OrderRepository {
   findDishesByIds(dishIds: number[]): Promise<OrderDish[]>;
@@ -22,7 +31,7 @@ export interface OrderRepository {
   }): Promise<OrderRecord>;
   findMany(filters: {
     userId?: number;
-    statuses?: string[];
+    statuses?: OrderStatus[];
     sort: "asc" | "desc";
     skip: number;
     take: number;
@@ -34,31 +43,10 @@ export interface OrderRepository {
     nextStatus: OrderStatus,
     userId?: number,
   ): Promise<OrderRecord | null>;
+  beginPayment(orderId: number, userId: number): Promise<boolean>;
+  completePayment(orderId: number, userId: number): Promise<OrderRecord | null>;
+  releasePayment(orderId: number, userId: number): Promise<void>;
 }
-
-export type OrderRecord = {
-  id: number;
-  status: OrderStatus;
-  note: string | null;
-  totalCents: number;
-
-  createdAt: Date;
-  updatedAt: Date;
-  user: { id: number; name: string };
-  items: Array<{
-    dishId: number;
-    quantity: number;
-    unitPriceCents: number;
-    dish: { name: string };
-  }>;
-};
-
-const orderInclude = {
-  user: { select: { id: true, name: true } },
-  items: {
-    include: { dish: { select: { name: true } } },
-  },
-} as const;
 
 // Toutes les lectures et écritures de commandes passent par Prisma ici.
 export const orderRepository: OrderRepository = {
@@ -115,15 +103,13 @@ export const orderRepository: OrderRepository = {
         },
         include: orderInclude,
       });
-    }) as Promise<OrderRecord>;
+    });
   },
 
   async findMany(filters) {
     const where = {
       ...(filters.userId !== undefined ? { userId: filters.userId } : {}),
-      ...(filters.statuses?.length
-        ? { status: { in: filters.statuses as never } }
-        : {}),
+      ...(filters.statuses?.length ? { status: { in: filters.statuses } } : {}),
     };
 
     // Charge la page et son total pour que le front puisse construire la pagination.
@@ -138,7 +124,7 @@ export const orderRepository: OrderRepository = {
       prisma.order.count({ where }),
     ]);
 
-    return { items: items as unknown as OrderRecord[], total };
+    return { items, total };
   },
 
   async findById(orderId, userId) {
@@ -148,7 +134,7 @@ export const orderRepository: OrderRepository = {
         ...(userId !== undefined ? { userId } : {}),
       },
       include: orderInclude,
-    }) as Promise<OrderRecord | null>;
+    });
   },
 
   async changeStatus(orderId, expectedStatus, nextStatus, userId) {
@@ -158,6 +144,7 @@ export const orderRepository: OrderRepository = {
           id: orderId,
           status: expectedStatus,
           ...(userId !== undefined ? { userId } : {}),
+          ...(nextStatus === "CANCELLED" ? { paymentInProgress: false } : {}),
         },
         data: { status: nextStatus },
       });
@@ -181,6 +168,49 @@ export const orderRepository: OrderRepository = {
         where: { id: orderId },
         include: orderInclude,
       });
+    });
+  },
+
+  async beginPayment(orderId, userId) {
+    const updated = await prisma.order.updateMany({
+      where: {
+        id: orderId,
+        userId,
+        status: { not: "CANCELLED" },
+        paymentStatus: "UNPAID",
+        paymentInProgress: false,
+      },
+      data: { paymentInProgress: true },
+    });
+    return updated.count === 1;
+  },
+
+  async completePayment(orderId, userId) {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          userId,
+          status: { not: "CANCELLED" },
+          paymentStatus: "UNPAID",
+          paymentInProgress: true,
+        },
+        data: { paymentStatus: "PAID", paymentInProgress: false },
+      });
+
+      if (updated.count !== 1) return null;
+
+      return tx.order.findFirst({
+        where: { id: orderId, userId },
+        include: orderInclude,
+      });
     }) as Promise<OrderRecord | null>;
+  },
+
+  async releasePayment(orderId, userId) {
+    await prisma.order.updateMany({
+      where: { id: orderId, userId, paymentInProgress: true },
+      data: { paymentInProgress: false },
+    });
   },
 };

@@ -1,4 +1,5 @@
 import { prisma } from "../db.js";
+import type { Prisma } from "../generated/prisma/client.js";
 
 export type DishFilters = {
   category?: number;
@@ -26,7 +27,18 @@ const dishDetails = {
   allergens: true,
 } as const;
 
-export const dishRepository = {
+export type DishRecord = Prisma.DishGetPayload<{ include: typeof dishDetails }>;
+
+export interface DishRepository {
+  findAll(filters: DishFilters): Promise<{ dishes: DishRecord[]; total: number }>;
+  findById(id: number): Promise<DishRecord | null>;
+  create(data: DishWriteData): Promise<DishRecord>;
+  update(id: number, data: DishPatchData): Promise<DishRecord>;
+  updateImage(id: number, imageUrl: string): Promise<DishRecord>;
+  delete(id: number): Promise<void>;
+}
+
+export const dishRepository: DishRepository = {
   async findAll(filters: DishFilters) {
     const where = {
       ...(filters.category && {

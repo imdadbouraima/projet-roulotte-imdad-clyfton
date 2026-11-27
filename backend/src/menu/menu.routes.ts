@@ -1,10 +1,10 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
-import { auth } from "../container.js";
+import type { Auth } from "../fourni/auth/index.js";
 import { AuthHttpError } from "../fourni/auth/errors.js";
-import { menuController } from "./menu.controller.js";
+import { createMenuController } from "./menu.controller.js";
+import type { MenuServiceApi } from "./menu.service.js";
 
-const router = Router();
 const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 // Le middleware d'upload traduit ses erreurs dans le même format que le reste de l'API.
@@ -20,19 +20,24 @@ function parseDishImage(req: Request, res: Response, next: NextFunction) {
   });
 }
 
-router.get("/categories", menuController.getCategories);
-router.get("/allergens", menuController.getAllergens);
-router.get("/dishes", menuController.getDishes);
-router.get("/dishes/:id", menuController.getDishById);
-router.post("/dishes", auth.requireAuth, auth.requireRole("ADMIN"), menuController.createDish);
-router.patch("/dishes/:id", auth.requireAuth, auth.requireRole("ADMIN"), menuController.updateDish);
-router.delete("/dishes/:id", auth.requireAuth, auth.requireRole("ADMIN"), menuController.deleteDish);
-router.put(
-  "/dishes/:id/image",
-  auth.requireAuth,
-  auth.requireRole("ADMIN"),
-  parseDishImage,
-  menuController.uploadDishImage,
-);
+export function createMenuRouter(auth: Auth, menuService: MenuServiceApi) {
+  const router = Router();
+  const controller = createMenuController(menuService);
 
-export default router;
+  router.get("/categories", controller.getCategories);
+  router.get("/allergens", controller.getAllergens);
+  router.get("/dishes", controller.getDishes);
+  router.get("/dishes/:id", controller.getDishById);
+  router.post("/dishes", auth.requireAuth, auth.requireRole("ADMIN"), controller.createDish);
+  router.patch("/dishes/:id", auth.requireAuth, auth.requireRole("ADMIN"), controller.updateDish);
+  router.delete("/dishes/:id", auth.requireAuth, auth.requireRole("ADMIN"), controller.deleteDish);
+  router.put(
+    "/dishes/:id/image",
+    auth.requireAuth,
+    auth.requireRole("ADMIN"),
+    parseDishImage,
+    controller.uploadDishImage,
+  );
+
+  return router;
+}

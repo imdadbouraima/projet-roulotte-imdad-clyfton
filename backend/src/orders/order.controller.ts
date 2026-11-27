@@ -3,13 +3,9 @@ import { z } from "zod";
 import { AuthHttpError } from "../fourni/auth/errors.js";
 import { currentUser } from "../fourni/auth/index.js";
 import { toOrderDto } from "./order.dto.js";
-import { OrderService } from "./order.service.js";
-import { orderRepository } from "./order.repository.js";
-import { publishOrderCreated, publishOrderUpdated } from "../realtime/event-bus.js";
+import { orderStatuses, type OrderStatus } from "./order-status.js";
+import type { OrderServiceApi } from "./order.service.js";
 
-const orderService = new OrderService(orderRepository);
-
-// Forme attendue pour créer une commande : quantités limitées et note facultative.
 const createOrderSchema = z.strictObject({
   items: z.array(z.strictObject({
     dishId: z.number().int().positive(),
@@ -25,9 +21,8 @@ const listOrdersSchema = z.strictObject({
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
 
-const orderStatusSchema = z.enum(["RECEIVED", "PREPARING", "READY", "PICKED_UP", "CANCELLED"]);
+const orderStatusSchema = z.enum(orderStatuses);
 
-// Transforme les erreurs de validation en réponses lisibles par le front.
 function validationError(result: z.ZodSafeParseResult<unknown>): never {
   if (result.success) throw new Error("validationError called with valid data");
   throw new AuthHttpError(
@@ -38,77 +33,91 @@ function validationError(result: z.ZodSafeParseResult<unknown>): never {
   );
 }
 
-export const createOrder: RequestHandler = async (req, res) => {
-  const parsed = createOrderSchema.safeParse(req.body);
-  if (!parsed.success) validationError(parsed);
+export function createOrderController(orderService: OrderServiceApi) {
+  const createOrder: RequestHandler = async (req, res) => {
+    const parsed = createOrderSchema.safeParse(req.body);
+    if (!parsed.success) validationError(parsed);
 
-  // Évite deux lignes séparées pour le même plat dans une seule commande.
-  const dishIds = parsed.data.items.map((item) => item.dishId);
-  if (new Set(dishIds).size !== dishIds.length) {
-    throw new AuthHttpError(400, "VALIDATION_ERROR", "Deux lignes ne peuvent pas viser le meme plat");
-  }
-
-  const order = await orderService.create(currentUser(req), parsed.data);
-  const dto = toOrderDto(order);
-  // La cuisine n'est avertie qu'une fois la commande enregistrée en base.
-  publishOrderCreated(dto);
-  res.status(201).location(`/orders/${order.id}`).json(dto);
-};
-
-export const listOrders: RequestHandler = async (req, res) => {
-  const parsed = listOrdersSchema.safeParse(req.query);
-  if (!parsed.success) validationError(parsed);
-
-  let statuses: string[] | undefined;
-  if (parsed.data.status) {
-    statuses = parsed.data.status.split(",").map((status) => status.trim());
-    const allowed = ["RECEIVED", "PREPARING", "READY", "PICKED_UP", "CANCELLED"];
-    if (statuses.some((status) => !allowed.includes(status))) {
-      throw new AuthHttpError(400, "VALIDATION_ERROR", "Statut de commande invalide");
+    const dishIds = parsed.data.items.map((item) => item.dishId);
+    if (new Set(dishIds).size !== dishIds.length) {
+      throw new AuthHttpError(400, "VALIDATION_ERROR", "Deux lignes ne peuvent pas viser le même plat");
     }
-  }
 
-  // Le service applique aussi la règle qui limite chaque client à ses commandes.
-  const result = await orderService.list(currentUser(req), {
-    statuses,
-    sort: parsed.data.sort === "createdAt" ? "asc" : "desc",
-    page: parsed.data.page,
-    pageSize: parsed.data.pageSize,
-  });
+    const order = await orderService.create(currentUser(req), parsed.data);
+    res.status(201).location(`/orders/${order.id}`).json(toOrderDto(order));
+  };
 
-  res.json({
-    items: result.items.map(toOrderDto),
-    total: result.total,
-    page: parsed.data.page,
-    pageSize: parsed.data.pageSize,
-  });
-};
+  const listOrders: RequestHandler = async (req, res) => {
+    const parsed = listOrdersSchema.safeParse(req.query);
+    if (!parsed.success) validationError(parsed);
 
-export const getOrder: RequestHandler = async (req, res) => {
-  const parsed = z.coerce.number().int().positive().safeParse(req.params.id);
-  if (!parsed.success) {
-    throw new AuthHttpError(400, "VALIDATION_ERROR", "Identifiant invalide");
-  }
+    let statuses: OrderStatus[] | undefined;
+    if (parsed.data.status) {
+      const requestedStatuses = parsed.data.status.split(",").map((status) => status.trim());
+      const allowed = new Set<string>(orderStatuses);
+      const validStatuses = requestedStatuses.filter(
+        (status): status is OrderStatus => allowed.has(status),
+      );
+      if (validStatuses.length !== requestedStatuses.length) {
+        throw new AuthHttpError(400, "VALIDATION_ERROR", "Statut de commande invalide");
+      }
+      statuses = validStatuses;
+    }
 
-  const order = await orderService.getById(currentUser(req), parsed.data);
-  res.json(toOrderDto(order));
-};
+    const result = await orderService.list(currentUser(req), {
+      statuses,
+      sort: parsed.data.sort === "createdAt" ? "asc" : "desc",
+      page: parsed.data.page,
+      pageSize: parsed.data.pageSize,
+    });
 
-export const updateOrderStatus: RequestHandler = async (req, res) => {
-  const parsedId = z.coerce.number().int().positive().safeParse(req.params.id);
-  if (!parsedId.success) {
-    throw new AuthHttpError(400, "VALIDATION_ERROR", "Identifiant invalide");
-  }
+    res.json({
+      items: result.items.map(toOrderDto),
+      total: result.total,
+      page: parsed.data.page,
+      pageSize: parsed.data.pageSize,
+    });
+  };
 
-  const parsedBody = z.strictObject({ status: orderStatusSchema }).safeParse(req.body);
-  if (!parsedBody.success) validationError(parsedBody);
+  const getOrder: RequestHandler = async (req, res) => {
+    const parsed = z.coerce.number().int().positive().safeParse(req.params.id);
+    if (!parsed.success) {
+      throw new AuthHttpError(400, "VALIDATION_ERROR", "Identifiant invalide");
+    }
 
-  const order = await orderService.changeStatus(
-    currentUser(req),
-    parsedId.data,
-    parsedBody.data.status,
-  );
-  const dto = toOrderDto(order);
-  publishOrderUpdated(dto);
-  res.json(dto);
-};
+    const order = await orderService.getById(currentUser(req), parsed.data);
+    res.json(toOrderDto(order));
+  };
+
+  const updateOrderStatus: RequestHandler = async (req, res) => {
+    const parsedId = z.coerce.number().int().positive().safeParse(req.params.id);
+    if (!parsedId.success) {
+      throw new AuthHttpError(400, "VALIDATION_ERROR", "Identifiant invalide");
+    }
+
+    const parsedBody = z.strictObject({ status: orderStatusSchema }).safeParse(req.body);
+    if (!parsedBody.success) validationError(parsedBody);
+
+    const order = await orderService.changeStatus(
+      currentUser(req),
+      parsedId.data,
+      parsedBody.data.status,
+    );
+    res.json(toOrderDto(order));
+  };
+
+  const payOrder: RequestHandler = async (req, res) => {
+    const parsedId = z.coerce.number().int().positive().safeParse(req.params.id);
+    if (!parsedId.success) {
+      throw new AuthHttpError(400, "VALIDATION_ERROR", "Identifiant invalide");
+    }
+
+    const parsedBody = z.strictObject({ token: z.string() }).safeParse(req.body);
+    if (!parsedBody.success) validationError(parsedBody);
+
+    const order = await orderService.pay(currentUser(req), parsedId.data, parsedBody.data.token);
+    res.json(toOrderDto(order));
+  };
+
+  return { createOrder, listOrders, getOrder, updateOrderStatus, payOrder };
+}

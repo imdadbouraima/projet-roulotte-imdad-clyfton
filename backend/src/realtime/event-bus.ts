@@ -1,48 +1,39 @@
-import type { Response } from "express";
-import type { AuthUser } from "../fourni/auth/crypto.js";
+import { logger } from "../logging.js";
+import type { OrderRecord } from "../orders/order.repository.js";
 
-type OrderEventData = {
-  customer: { id: number; name: string };
+export type OrderEvent = {
+  type: "order.created" | "order.updated";
+  order: OrderRecord;
 };
 
-type Subscriber = {
-  response: Response;
-  user: AuthUser;
-};
-
-const subscribers = new Set<Subscriber>();
-
-export function subscribeToOrderEvents(user: AuthUser, response: Response) {
-  const subscriber = { user, response };
-  subscribers.add(subscriber);
-  return () => subscribers.delete(subscriber);
+export interface OrderEventPublisher {
+  publish(event: OrderEvent): void;
 }
 
-function sendToSubscribers(
-  eventName: "order.created" | "order.updated",
-  order: OrderEventData,
-  shouldReceive: (user: AuthUser) => boolean,
-) {
-  // Le filtrage se fait commande par commande pour ne rien révéler aux autres clients.
-  const frame = `event: ${eventName}\ndata: ${JSON.stringify(order)}\n\n`;
-  for (const subscriber of subscribers) {
-    if (!shouldReceive(subscriber.user)) continue;
-    if (subscriber.response.destroyed || subscriber.response.writableEnded) {
-      subscribers.delete(subscriber);
-      continue;
-    }
-    subscriber.response.write(frame);
-  }
+export interface OrderEventBus extends OrderEventPublisher {
+  subscribe(listener: (event: OrderEvent) => void): () => void;
 }
 
-export function publishOrderCreated(order: OrderEventData) {
-  sendToSubscribers("order.created", order, ({ role }) => role === "STAFF" || role === "ADMIN");
-}
+export function createOrderEventBus(): OrderEventBus {
+  const listeners = new Set<(event: OrderEvent) => void>();
 
-export function publishOrderUpdated(order: OrderEventData) {
-  sendToSubscribers(
-    "order.updated",
-    order,
-    ({ id, role }) => role === "STAFF" || role === "ADMIN" || id === order.customer.id,
-  );
+  return {
+    publish(event) {
+      for (const listener of listeners) {
+        try {
+          listener(event);
+        } catch (error) {
+          logger.error(
+            { errorName: error instanceof Error ? error.name : "UnknownError" },
+            "Order event subscriber failed",
+          );
+        }
+      }
+    },
+
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
 }

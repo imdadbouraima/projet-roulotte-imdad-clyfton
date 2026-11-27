@@ -1,5 +1,6 @@
 
 import { z } from "zod";
+import { logger } from "./logging.js";
 
 // Vérifie les réglages du fichier .env avant de démarrer le serveur.
 const envSchema = z.object({
@@ -12,13 +13,17 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("2h"),
 
   CORS_ORIGIN: z.string().url().default("http://localhost:5173"),
+
+  PAYMENT_URL: z.string().url(),
+
+  PAYMENT_API_KEY: z.string().min(1),
 });
 
 const result = envSchema.safeParse(process.env);
 
 // Mieux vaut arrêter le démarrage que lancer l'API avec une configuration incomplète.
 if (!result.success) {
-  console.error("Erreur dans la configuration :", result.error.flatten().fieldErrors);
+  logger.error({ fields: result.error.flatten().fieldErrors }, "Invalid environment configuration");
   throw new Error("Configuration invalide. Vérifie le fichier .env.");
 }
 

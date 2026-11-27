@@ -1,16 +1,17 @@
 import express from "express";
 import { config } from "./config.js";
 import { installSecurity, authErrorHandler } from "./fourni/auth/index.js";
-import { auth } from "./container.js";
-import { prisma } from "./db.js";
+import { createContainer, type AppContainer } from "./container.js";
 import { uploadsDirectory } from "./menu/dish-image.storage.js";
-import menuRouter from "./menu/menu.routes.js";
-import ordersRouter from "./orders/orders.routes.js";
-import eventsRouter from "./realtime/events.routes.js";
+import { createMenuRouter } from "./menu/menu.routes.js";
+import { createOrdersRouter } from "./orders/orders.routes.js";
+import { createEventsRouter } from "./realtime/events.routes.js";
 import { requestIdMiddleware } from "./request-id.js";
+import { createHealthController } from "./health/health.controller.js";
+import { logger } from "./logging.js";
 
 // Assemble l'API : protections, routes, puis gestion des erreurs.
-export function createApp() {
+export function createApp(container: AppContainer = createContainer()) {
   const app = express();
 
   app.use(requestIdMiddleware);
@@ -30,23 +31,13 @@ export function createApp() {
     express.static(uploadsDirectory, { immutable: true, maxAge: "1y" }),
   );
 
-  // L'API peut répondre même si la base est coupée, mais le statut doit alors le signaler.
-  app.get("/health", async (_req, res) => {
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-      return res.json({ status: "ok", database: "up" });
-    } catch (error) {
-      const requestId = res.getHeader("X-Request-Id");
-      console.error(`[${requestId}] Vérification de la base de données échouée`, error);
-      return res.status(503).json({ status: "degraded", database: "down" });
-    }
-  });
+  app.get("/health", createHealthController(container.healthRepository));
 
   // Monte les routes d'authentification et du menu.
-  app.use("/auth", auth.router);
-  app.use("/", ordersRouter);
-  app.use("/", menuRouter);
-  app.use("/", eventsRouter);
+  app.use("/auth", container.auth.router);
+  app.use("/", createOrdersRouter(container.auth, container.orderService));
+  app.use("/", createMenuRouter(container.auth, container.menuService));
+  app.use("/", createEventsRouter(container.auth, container.orderEventBus));
 
   // Transforme les erreurs d'authentification en réponses HTTP lisibles.
   app.use(authErrorHandler);
@@ -60,7 +51,13 @@ export function createApp() {
 
   // Dernier filet de sécurité : les erreurs inattendues restent au format JSON.
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error(`[${res.getHeader("X-Request-Id")}] Erreur inattendue`, err);
+    logger.error(
+      {
+        requestId: res.getHeader("X-Request-Id"),
+        errorName: err instanceof Error ? err.name : "UnknownError",
+      },
+      "Unhandled API error",
+    );
     res.status(500).json({
       error: { code: "INTERNAL_ERROR", message: "Erreur interne du serveur" },
     });
