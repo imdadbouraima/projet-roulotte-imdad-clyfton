@@ -2,7 +2,7 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 
 describe("API HTTP Palier 1", () => {
-  it("GET /health retourne le statut attendu", async () => {
+  it("GET /health vérifie la base et identifie la requête", async () => {
     process.env.DATABASE_URL ??= "file:./dev.db";
     process.env.JWT_SECRET ??= "cle-secrete-pour-les-tests";
     const { createApp } = await import("./app.js");
@@ -11,10 +11,11 @@ describe("API HTTP Palier 1", () => {
     const response = await request(app).get("/health");
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ status: "ok" });
+    expect(response.body).toEqual({ status: "ok", database: "up" });
+    expect(response.headers["x-request-id"]).toBeTruthy();
   });
 
-  it("une route inconnue utilise le format d'erreur du contrat", async () => {
+  it("une route inconnue conserve le format d'erreur et reçoit son propre identifiant", async () => {
     const { createApp } = await import("./app.js");
     const app = createApp();
     const response = await request(app).get("/route-inconnue");
@@ -24,6 +25,7 @@ describe("API HTTP Palier 1", () => {
       code: "NOT_FOUND",
       message: "Route introuvable",
     });
+    expect(response.headers["x-request-id"]).toBeTruthy();
   });
 
   it("POST /orders sans token retourne 401", async () => {

@@ -148,4 +148,15 @@ export const menuController = {
     await menuService.deleteDish(parseDishId(req.params.id));
     return res.status(204).send();
   },
+
+  async uploadDishImage(req: Request, res: Response) {
+    const id = parseDishId(req.params.id);
+    const file = req.file;
+    if (!file) {
+      throw new AuthHttpError(400, "VALIDATION_ERROR", "Le fichier image est requis");
+    }
+
+    const updatedDish = await menuService.uploadDishImage(id, file.buffer);
+    return res.json(toDishDto(updatedDish));
+  },
 };

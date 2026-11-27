@@ -5,6 +5,7 @@ export type DishDtoSource = {
   priceCents: number;
   available: boolean;
   stock: number | null;
+  imageUrl: string | null;
   category: { id: number; name: string };
   allergens: Array<{ code: string; label: string }>;
 };
@@ -17,6 +18,7 @@ export function toDishDto(dish: DishDtoSource) {
     priceCents: dish.priceCents,
     available: dish.available,
     stock: dish.stock,
+    imageUrl: dish.imageUrl,
     category: {
       id: dish.category.id,
       name: dish.category.name,

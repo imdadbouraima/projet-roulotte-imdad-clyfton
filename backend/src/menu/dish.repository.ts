@@ -107,6 +107,14 @@ export const dishRepository = {
     });
   },
 
+  async updateImage(id: number, imageUrl: string) {
+    return prisma.dish.update({
+      where: { id },
+      data: { imageUrl },
+      include: dishDetails,
+    });
+  },
+
   async delete(id: number) {
     await prisma.dish.delete({ where: { id } });
   },

@@ -2,6 +2,11 @@ import { categoryRepository } from "./category.repository.js";
 import { allergenRepository } from "./allergen.repository.js";
 import { AuthHttpError } from "../fourni/auth/errors.js";
 import { dishRepository, type DishFilters, type DishPatchData, type DishWriteData } from "./dish.repository.js";
+import {
+  detectDishImageFormat,
+  removeDishImage,
+  saveDishImage,
+} from "./dish-image.storage.js";
 
 function prismaErrorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
@@ -71,6 +76,38 @@ export const menuService = {
       }
       throw error;
     }
+  },
+
+  async uploadDishImage(id: number, buffer: Buffer) {
+    const format = detectDishImageFormat(buffer);
+    if (!format) {
+      throw new AuthHttpError(415, "UNSUPPORTED_MEDIA_TYPE", "Format accepté : PNG, JPEG ou WebP");
+    }
+
+    const currentDish = await dishRepository.findById(id);
+    if (!currentDish) {
+      throw new AuthHttpError(404, "NOT_FOUND", "Plat introuvable");
+    }
+
+    const imageUrl = await saveDishImage(buffer, format);
+    let updatedDish;
+    try {
+      updatedDish = await dishRepository.updateImage(id, imageUrl);
+    } catch (error) {
+      try {
+        await removeDishImage(imageUrl);
+      } catch (cleanupError) {
+        console.error("Impossible de supprimer le fichier image temporaire :", cleanupError);
+      }
+      if (prismaErrorCode(error) === "P2025") {
+        throw new AuthHttpError(404, "NOT_FOUND", "Plat introuvable");
+      }
+      throw error;
+    }
+
+    // On garde l'ancienne photo jusqu'à ce que la nouvelle adresse soit bien enregistrée.
+    await removeDishImage(currentDish.imageUrl);
+    return updatedDish;
   },
 
   async deleteDish(id: number) {

@@ -5,6 +5,7 @@ import { currentUser } from "../fourni/auth/index.js";
 import { toOrderDto } from "./order.dto.js";
 import { OrderService } from "./order.service.js";
 import { orderRepository } from "./order.repository.js";
+import { publishOrderCreated, publishOrderUpdated } from "../realtime/event-bus.js";
 
 const orderService = new OrderService(orderRepository);
 
@@ -48,7 +49,10 @@ export const createOrder: RequestHandler = async (req, res) => {
   }
 
   const order = await orderService.create(currentUser(req), parsed.data);
-  res.status(201).location(`/orders/${order.id}`).json(toOrderDto(order));
+  const dto = toOrderDto(order);
+  // La cuisine n'est avertie qu'une fois la commande enregistrée en base.
+  publishOrderCreated(dto);
+  res.status(201).location(`/orders/${order.id}`).json(dto);
 };
 
 export const listOrders: RequestHandler = async (req, res) => {
@@ -104,5 +108,7 @@ export const updateOrderStatus: RequestHandler = async (req, res) => {
     parsedId.data,
     parsedBody.data.status,
   );
-  res.json(toOrderDto(order));
+  const dto = toOrderDto(order);
+  publishOrderUpdated(dto);
+  res.json(dto);
 };
