@@ -65,7 +65,7 @@ export class OrderService {
       skip: (filters.page - 1) * filters.pageSize,
       take: filters.pageSize,
     });
-  }
+  } 
 
   async getById(user: AuthenticatedUser, orderId: number) {
     // Chercher par identifiant et propriétaire empêche un client d'ouvrir la commande d'un autre.
