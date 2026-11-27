@@ -1,13 +1,11 @@
-
 import { prisma } from "../db.js";
 
-// Accès aux allergènes enregistrés dans la base.
 export const allergenRepository = {
   async findAll() {
     return prisma.allergen.findMany({
       orderBy: {
-  code: "asc",
-},
+        code: "asc",
+      },
     });
   },
 
@@ -17,3 +15,5 @@ export const allergenRepository = {
     });
   },
 };
+
+
